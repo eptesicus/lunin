@@ -1,0 +1,116 @@
+#!/usr/bin/lua
+-- Lunin: Lua implementation of a munin-node
+-- (c) 2016, Florian Heimgaertner
+
+-- This software may be modified and distributed under the terms
+-- of the MIT license.  See the LICENSE file for details.
+
+
+io.output():setvbuf("line")
+
+plugins_enabled = { 'uptime', 'load', 'cpu', 'df', 'net', 'wlan', 'memory'}
+ver  = '0.04'
+host = os.getenv('HOSTNAME')
+
+function gethostname() 
+  if host then
+    return host
+  end
+  local f = io.open('/proc/sys/kernel/hostname')
+  local hostname = f:read('*line') or ''
+  f:close()
+  return hostname
+end
+
+function graph_header(title, category, vlabel, args, scale)
+  print('graph_title '..title)
+  if args then 
+    print('graph_args '..args)
+  else
+    print('graph_args --base 1000 -l 0')
+  end
+  print('graph_category '..category)
+  if vlabel then print('graph_vlabel '..vlabel) end
+  if scale then print('graph_scale '..scale) end
+end
+
+function graph_field(name, draw, label, cdef)
+  local flabel = label or name
+  print(name..'.label '..flabel)
+  if draw then
+    print(name..'.draw '..draw)
+  end
+  if cdef then
+    print(name..'.cdef '..cdef)
+  end
+end
+
+
+
+plugin = {}
+action = {}
+
+-- munin node actions
+
+action['config'] = function(p)
+  if plugin[p] then
+    plugin[p]('conf')
+  else
+    print('# Unknown service')
+  end
+  print('.')
+end
+
+action['fetch'] = function(p)
+  if plugin[p] then
+    plugin[p]()
+  else
+    print('# Unknown service')
+  end
+  print('.')
+end
+
+action['list'] = function() 
+  for k,v in pairs(plugin) do
+    io.write(k..' ')
+  end
+  io.write('\n')
+end
+
+action['version'] = function()
+  print('munins node on '..gethostname()..' version: '..ver..' (lunin, '.._VERSION..')')
+end
+
+action['quit'] = function() 
+  os.exit()
+end
+
+action['nodes'] = function()
+  print(gethostname()..'\n.')
+end
+
+action['help'] = function()
+  io.write('# Unknown command. Try ')
+  for k,v in pairs(action) do io.write(k..' ') end
+  io.write('\n')
+end
+
+-- load plugins
+for k,v in pairs(plugins_enabled) do
+  plugin[v] = loadfile('plugins/'..v..'.lua')
+end
+
+
+-- greeting banner
+print('# munin node at '..gethostname())
+
+-- main loop
+while true do
+  local cmdline = io.read() or os.exit()
+  local cmd, arg = cmdline:match('^(%l+)%s?([%w_]*)\r?$')
+  if action[cmd] then
+    action[cmd](arg)
+  else
+    action['help']()
+  end
+end
