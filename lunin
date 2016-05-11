@@ -11,6 +11,7 @@ io.output():setvbuf("line")
 plugins_enabled = { 'uptime', 'load', 'cpu', 'df', 'net', 'wlan', 'memory'}
 ver  = '0.04'
 host = os.getenv('HOSTNAME')
+plugindir = 'plugins'
 
 function gethostname() 
   if host then
@@ -97,7 +98,7 @@ end
 
 -- load plugins
 for k,v in pairs(plugins_enabled) do
-  plugin[v] = loadfile('plugins/'..v..'.lua')
+  plugin[v] = loadfile(plugindir..'/'..v..'.lua')
 end
 
 
@@ -111,6 +112,6 @@ while true do
   if action[cmd] then
     action[cmd](arg)
   else
-    action['help']()
+    action.help()
   end
 end
