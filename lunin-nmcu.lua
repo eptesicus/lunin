@@ -1,19 +1,31 @@
-#!/usr/bin/lua
 -- munin thermometer using DS18B20 sensors on ESP8622
 -- (c) 2016, Florian Heimgaertner
 
 -- This software may be modified and distributed under the terms
 -- of the MIT license.  See the LICENSE file for details.
 
-ver  = '0.04n'
-owpin = 2
+local modname = ...
+local M = {}
+_G[modname] = M
 
-require('ds18b20')
-ds18b20.setup(owpin)
 
-plugin = {}
-action = {}
-hostname = ('esp%06x'):format(node.chipid())
+local plugin = {}
+local action = {}
+local hostname = ('esp%06x'):format(node.chipid())
+local ver = '0.04n'
+local pin = nil
+local sensors = nil
+
+local table = table
+local string = string
+local ow = ow
+local tmr = tmr
+local node = node
+local file = file
+local net = net
+local pairs = pairs
+
+setfenv(1,M)
 
 
 -- munin node actions
@@ -62,35 +74,58 @@ action['quit'] = function(socket)
 end
 
 plugin['ds18b20'] = function(socket, x)
-  if sensors == nil then
+  if sensors == nil then -- find sensors
     sensors = {}
-    ow.setup(owpin)
-    ow.reset_search(owpin)
+    ow.setup(pin)
+    ow.reset_search(pin)
     local nc = 0
     repeat
-      local addr = ow.search(owpin)
+      local addr = ow.search(pin)
       if (addr == nil) then
 	nc = nc + 1
-      elseif (addr:byte(1) == 0x28) then
+      elseif (addr:byte(1) == 0x28 and addr:byte(8) == ow.crc8(string.sub(addr,1,7))) then
 	table.insert(sensors, addr)
       end
       tmr.wdclr()
     until (nc > 1)
-    ow.reset_search(owpin)
+    ow.reset_search(pin)
   end
 
   if x == 'conf' then
     socket:send('graph_title DS18B20 Temperature Sensors\ngraph_vlabel degrees Celsius\ngraph_category sensors\n')
-    for k,v in pairs(sensors) do 
-      local saddr = ("%02x%02x%02x%02x%02x%02x"):format(v:byte(2,7))
+    for _,addr in pairs(sensors) do 
+      local saddr = ("%02x%02x%02x%02x%02x%02x"):format(addr:byte(2,7))
       socket:send('temp'..saddr..'.label '..saddr..'\n')
     end
   else
-    for k,v in pairs(sensors) do 
-      local temp, temp2 = ds18b20.readNumber(v)
-      if temp < 85 then
-	local saddr = ("%02x%02x%02x%02x%02x%02x"):format(v:byte(2,7))
-	socket:send('temp'..saddr..'.value '..temp..string.format(".%04u", temp2)..'\n')
+    for _,addr in pairs(sensors) do
+      local s = ''
+      local t = 850001
+      local data = nil
+      ow.setup(pin)
+      ow.reset(pin)
+      ow.select(pin, addr)
+      ow.write(pin, 0x44, 1)
+      ow.reset(pin)
+      ow.select(pin, addr)
+      ow.write(pin, 0xBE, 1)
+      data = string.char(ow.read(pin))
+      for i = 1, 8 do
+        data = data .. string.char(ow.read(pin))
+      end
+      if (data:byte(9) == ow.crc8(string.sub(data,1,8))) then
+        t = (data:byte(1) + data:byte(2) * 256) 
+	if (t > 0x7fff) then
+          t = t - 0x10000
+	  s = '-'
+        end
+	t = t * 625
+      end
+      tmr.wdclr()
+
+      if t < 850000 then
+        local saddr = ("%02x%02x%02x%02x%02x%02x"):format(addr:byte(2,7))
+	socket:send(('temp%s.value %s%i.%04u\n'):format(saddr, s, t/10000,t %10000))
       end
     end
   end
@@ -113,15 +148,22 @@ plugin['fsinfo'] = function(socket, x)
   end
 end
 
-srv=net.createServer(net.TCP,10)
-srv:listen(4949,function(socket)
-  socket:send('# munin node at '..hostname..'\n')
-  socket:on("receive",function(socket,payload)
-    local cmd, arg = payload:match('^(%l+)%s?([%w_]*)\r?\n?$')
-      if action[cmd] then
-	action[cmd](socket, arg)
-      else
-	action['help'](socket)
-      end
+function start(owpin)
+  pin = owpin
+  ow.setup(pin)
+  srv=net.createServer(net.TCP,10)
+  srv:listen(4949,function(socket)
+    socket:send('# munin node at '..hostname..'\n')
+    socket:on("receive",function(socket,payload)
+      local cmd, arg = payload:match('^(%l+)%s?([%w_]*)\r?\n?$')
+	if action[cmd] then
+	  action[cmd](socket, arg)
+	else
+	  action['help'](socket)
+	end
+    end)
   end)
-end)
+end
+
+
+return M
