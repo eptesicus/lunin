@@ -21,7 +21,7 @@ function lunin_init()
 
   ow.setup(owpin)
   ow.reset_search(owpin)
-  local nilcount = 0
+  local nc = 0
   repeat
     local addr = ow.search(owpin)
     if (addr == nil) then
@@ -68,7 +68,7 @@ action['list'] = function(socket)
 end
 
 action['version'] = function(socket)
-  socket:send('munins node on '..hostname..' version: '..ver..' (lunin, '.._VERSION..'/'..fwVer..')\n')
+  socket:send(('munins node on %s version: %s (lunin, %s/NodeMCU %i.%i.%i)\n'):format(hostname, ver, _VERSION, node.info()))
 end
 
 action['nodes'] = function(socket)
@@ -103,6 +103,22 @@ plugin['ds18b20'] = function(socket, x)
   end
 end
 
+plugin['heap'] = function(socket, x)
+  if x == 'conf' then
+    socket:send('graph_title Heap remaining\ngraph_vlabel Bytes\ngraph_category system\ngraph_args --base 1024\nheap.label heap\n')
+  else
+    socket:send('heap.value '..node.heap()..'\n')
+  end
+end
+
+plugin['fsinfo'] = function(socket, x)
+  local remaining, used, total = file.fsinfo()
+  if x == 'conf' then
+    socket:send('graph_title Flash usage\ngraph_vlabel Bytes\ngraph_category system\ngraph_args --base 1024 -l 0 --upper-limit '..total..'\nusage.label usage\n')
+  else
+    socket:send('usage.value '..used..'\n')
+  end
+end
 
 srv=net.createServer(net.TCP,10)
 srv:listen(4949,function(socket)
