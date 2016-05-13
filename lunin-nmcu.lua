@@ -13,31 +13,7 @@ ds18b20.setup(owpin)
 
 plugin = {}
 action = {}
-
-function lunin_init()
-  local fwVer = ('NodeMCU %i.%i.%i'):format(node.info())
-  local hostname = ('esp%06x'):format(node.chipid())
-  local sensors = {}
-
-  ow.setup(owpin)
-  ow.reset_search(owpin)
-  local nc = 0
-  repeat
-    local addr = ow.search(owpin)
-    if (addr == nil) then
-      nc = nc + 1
-    elseif (addr:byte(1) == 0x28) then
-      table.insert(sensors, addr)
-    end
-    tmr.wdclr()
-  until (nc > 1)
-  ow.reset_search(owpin)
-
-  return hostname, fwVer, sensors
-end
-
-hostname, fwVer, sensors = lunin_init()
-
+hostname = ('esp%06x'):format(node.chipid())
 
 
 -- munin node actions
@@ -86,6 +62,23 @@ action['quit'] = function(socket)
 end
 
 plugin['ds18b20'] = function(socket, x)
+  if sensors == nil then
+    sensors = {}
+    ow.setup(owpin)
+    ow.reset_search(owpin)
+    local nc = 0
+    repeat
+      local addr = ow.search(owpin)
+      if (addr == nil) then
+	nc = nc + 1
+      elseif (addr:byte(1) == 0x28) then
+	table.insert(sensors, addr)
+      end
+      tmr.wdclr()
+    until (nc > 1)
+    ow.reset_search(owpin)
+  end
+
   if x == 'conf' then
     socket:send('graph_title DS18B20 Temperature Sensors\ngraph_vlabel degrees Celsius\ngraph_category sensors\n')
     for k,v in pairs(sensors) do 
