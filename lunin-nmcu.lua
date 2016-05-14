@@ -101,7 +101,6 @@ plugin['ds18b20'] = function(socket, x)
     for _,addr in pairs(sensors) do
       local s = ''
       local t = 850001
-      local data = nil
       ow.setup(pin)
       ow.reset(pin)
       ow.select(pin, addr)
@@ -109,10 +108,7 @@ plugin['ds18b20'] = function(socket, x)
       ow.reset(pin)
       ow.select(pin, addr)
       ow.write(pin, 0xBE, 1)
-      data = string.char(ow.read(pin))
-      for i = 1, 8 do
-        data = data .. string.char(ow.read(pin))
-      end
+      local data = ow.read_bytes(pin, 9)
       if (data:byte(9) == ow.crc8(string.sub(data,1,8))) then
         t = (data:byte(1) + data:byte(2) * 256) 
 	if (t > 0x7fff) then
