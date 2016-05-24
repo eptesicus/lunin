@@ -13,6 +13,7 @@ local plugin = {}
 local action = {}
 local hostname = ('esp%06x'):format(node.chipid())
 local ver = '0.04n'
+local luaver = _VERSION
 local pin = nil
 local sensors = nil
 
@@ -56,7 +57,7 @@ action['list'] = function(socket)
 end
 
 action['version'] = function(socket)
-  socket:send(('munins node on %s version: %s (lunin, %s/NodeMCU %i.%i.%i)\n'):format(hostname, ver, _VERSION, node.info()))
+  socket:send(('munins node on %s version: %s (lunin, %s/NodeMCU %i.%i.%i)\n'):format(hostname, ver, luaver, node.info()))
 end
 
 action['nodes'] = function(socket)
@@ -72,6 +73,8 @@ end
 action['quit'] = function(socket)
   socket:close()
 end
+
+-- plugins
 
 plugin['ds18b20'] = function(socket, x)
   if sensors == nil then -- find sensors
